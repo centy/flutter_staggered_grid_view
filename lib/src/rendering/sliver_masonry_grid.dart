@@ -310,7 +310,7 @@ class RenderSliverMasonryGrid extends RenderSliverMultiBoxAdaptor {
       // Clear off-screen caches to prevent using stale data
       _previousCrossAxisIndexes.clear();
       _previousMainAxisExtents.clear();
-      
+
       // Invalidate all visible children's layout offsets to force clean relayout
       RenderBox? c = firstChild;
       while (c != null) {
@@ -318,7 +318,7 @@ class RenderSliverMasonryGrid extends RenderSliverMultiBoxAdaptor {
         parentData.layoutOffset = null;
         c = childAfter(c);
       }
-      
+
       int leadingChildrenWithoutLayoutOffset = 0;
       while (earliestUsefulChild != null &&
           childScrollOffset(earliestUsefulChild) == null) {
@@ -502,7 +502,7 @@ class RenderSliverMasonryGrid extends RenderSliverMultiBoxAdaptor {
     // scroll offset.
 
     assert(earliestUsefulChild == firstChild);
-    
+
     // After reorder recovery, the earliest child's offset might be slightly ahead
     // of scrollOffset. Only issue correction if we're not at the beginning of the list
     // and the offset is significantly ahead (prevents interfering with upward scrolling).
@@ -522,13 +522,13 @@ class RenderSliverMasonryGrid extends RenderSliverMultiBoxAdaptor {
         return;
       }
     }
-    
+
     // Use a more lenient assertion to tolerate small precision errors after recovery
-    assert(childScrollOffset(earliestUsefulChild!)! <= scrollOffset + 1.0);
+    assert(childScrollOffset(earliestUsefulChild)! <= scrollOffset + 1.0);
 
     // Make sure we've laid out at least one child.
     if (leadingChildWithLayout == null) {
-      earliestUsefulChild!.layout(childConstraints, parentUsesSize: true);
+      earliestUsefulChild.layout(childConstraints, parentUsesSize: true);
       leadingChildWithLayout = earliestUsefulChild;
       trailingChildWithLayout = earliestUsefulChild;
     }
@@ -541,14 +541,14 @@ class RenderSliverMasonryGrid extends RenderSliverMultiBoxAdaptor {
 
     bool inLayoutRange = true;
     child = earliestUsefulChild;
-    int index = indexOf(child!);
+    int index = indexOf(child);
 
     // From now on, the scrollOffsets will be the next possible scroll offsets
     // for new children.
     // As earliestUsefulChild is already laid out, we start by updating the
     // scroll offsets for the next children.
-    scrollOffsets[_childCrossAxisIndex(child!)!] =
-        childScrollOffset(child!)! + paintExtentOf(child!) + mainAxisSpacing;
+    scrollOffsets[_childCrossAxisIndex(child)!] =
+        childScrollOffset(child)! + paintExtentOf(child) + mainAxisSpacing;
 
     // We also make sure that any infinite scroll offset is set to 0 now.
     for (int i = 0; i < scrollOffsets.length; i++) {
