@@ -307,6 +307,18 @@ class RenderSliverMasonryGrid extends RenderSliverMultiBoxAdaptor {
     // layout offset, we have to find the first child that has valid layout
     // offset.
     if (childScrollOffset(firstChild!) == null) {
+      // Clear off-screen caches to prevent using stale data
+      _previousCrossAxisIndexes.clear();
+      _previousMainAxisExtents.clear();
+      
+      // Invalidate all visible children's layout offsets to force clean relayout
+      RenderBox? c = firstChild;
+      while (c != null) {
+        final parentData = _getParentData(c);
+        parentData.layoutOffset = null;
+        c = childAfter(c);
+      }
+      
       int leadingChildrenWithoutLayoutOffset = 0;
       while (earliestUsefulChild != null &&
           childScrollOffset(earliestUsefulChild) == null) {
@@ -490,7 +502,29 @@ class RenderSliverMasonryGrid extends RenderSliverMultiBoxAdaptor {
     // scroll offset.
 
     assert(earliestUsefulChild == firstChild);
-    assert(childScrollOffset(earliestUsefulChild!)! <= scrollOffset);
+    
+    // After reorder recovery, the earliest child's offset might be slightly ahead
+    // of scrollOffset. Only issue correction if we're not at the beginning of the list
+    // and the offset is significantly ahead (prevents interfering with upward scrolling).
+    final double earliestChildOffset = childScrollOffset(earliestUsefulChild!)!;
+    if (earliestChildOffset > scrollOffset + precisionErrorTolerance) {
+      final int firstChildIndex = indexOf(firstChild!);
+      if (firstChildIndex == 0) {
+        // We're at the beginning of the list, anchor to 0 instead of correcting
+        final childParentData = _getParentData(firstChild!);
+        childParentData.layoutOffset = 0.0;
+      } else if (earliestChildOffset > scrollOffset + 1.0) {
+        // Only correct if significantly ahead (> 1px) and not at beginning
+        // This prevents interfering with normal upward scrolling
+        geometry = SliverGeometry(
+          scrollOffsetCorrection: earliestChildOffset - scrollOffset,
+        );
+        return;
+      }
+    }
+    
+    // Use a more lenient assertion to tolerate small precision errors after recovery
+    assert(childScrollOffset(earliestUsefulChild!)! <= scrollOffset + 1.0);
 
     // Make sure we've laid out at least one child.
     if (leadingChildWithLayout == null) {
@@ -513,8 +547,8 @@ class RenderSliverMasonryGrid extends RenderSliverMultiBoxAdaptor {
     // for new children.
     // As earliestUsefulChild is already laid out, we start by updating the
     // scroll offsets for the next children.
-    scrollOffsets[_childCrossAxisIndex(child)!] =
-        childScrollOffset(child)! + paintExtentOf(child) + mainAxisSpacing;
+    scrollOffsets[_childCrossAxisIndex(child!)!] =
+        childScrollOffset(child!)! + paintExtentOf(child!) + mainAxisSpacing;
 
     // We also make sure that any infinite scroll offset is set to 0 now.
     for (int i = 0; i < scrollOffsets.length; i++) {
