@@ -5,6 +5,9 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter_staggered_grid_view/src/foundation/extensions.dart';
 import 'package:flutter_staggered_grid_view/src/rendering/sliver_simple_grid_delegate.dart';
 
+/// Callback signature for logging diagnostic messages.
+typedef DiagnosticLogCallback = void Function(String message);
+
 /// Parent data structure used by [RenderSliverMasonryGrid].
 class SliverMasonryGridParentData extends SliverMultiBoxAdaptorParentData {
   /// The index of the child in the non-scrolling axis.
@@ -34,17 +37,28 @@ class RenderSliverMasonryGrid extends RenderSliverMultiBoxAdaptor {
   ///
   /// The [mainAxisSpacing] and [crossAxisSpacing] arguments must be greater
   /// than zero.
+  ///
+  /// [onDiagnosticLog] is an optional callback for logging diagnostic information
+  /// useful for debugging layout issues on user devices.
   RenderSliverMasonryGrid({
     required RenderSliverBoxChildManager childManager,
     required SliverSimpleGridDelegate gridDelegate,
     required double mainAxisSpacing,
     required double crossAxisSpacing,
+    DiagnosticLogCallback? onDiagnosticLog,
   })  : assert(mainAxisSpacing >= 0),
         assert(crossAxisSpacing >= 0),
         _gridDelegate = gridDelegate,
         _mainAxisSpacing = mainAxisSpacing,
         _crossAxisSpacing = crossAxisSpacing,
-        super(childManager: childManager);
+        _onDiagnosticLog = onDiagnosticLog,
+        super(childManager: childManager) {
+    _onDiagnosticLog?.call(
+      'RenderSliverMasonryGrid created: mainAxisSpacing=$mainAxisSpacing, crossAxisSpacing=$crossAxisSpacing',
+    );
+  }
+
+  final DiagnosticLogCallback? _onDiagnosticLog;
 
   /// {@template fsgv.global.gridDelegate}
   /// The delegate that controls the size and position of the children.
@@ -188,6 +202,15 @@ class RenderSliverMasonryGrid extends RenderSliverMultiBoxAdaptor {
       crossAxisSpacing,
     );
 
+    _onDiagnosticLog?.call(
+      'performLayout START: scrollOffset=${constraints.scrollOffset}, '
+      'remainingExtent=${constraints.remainingPaintExtent}, '
+      'crossAxisCount=$crossAxisCount, '
+      'crossAxisExtent=${constraints.crossAxisExtent}, '
+      'childCount=$childCount, '
+      'firstChildIndex=${firstChild != null ? indexOf(firstChild!) : "null"}',
+    );
+
     _getCrossAxisIndex = axisDirectionIsReversed(constraints.crossAxisDirection)
         ? (int index) => crossAxisCount - index - 1
         : (int index) => index;
@@ -227,6 +250,10 @@ class RenderSliverMasonryGrid extends RenderSliverMultiBoxAdaptor {
     // If the crossAxisCount changed, we need to relayout-everything and scroll
     // to the previous first visible item.
     if (_lastCrossAxisCount != null && _lastCrossAxisCount != crossAxisCount) {
+      _onDiagnosticLog?.call(
+        'CrossAxisCount changed: $_lastCrossAxisCount -> $crossAxisCount, '
+        'triggering full relayout',
+      );
       _previousCrossAxisIndexes.clear();
       _previousMainAxisExtents.clear();
 
@@ -268,6 +295,12 @@ class RenderSliverMasonryGrid extends RenderSliverMultiBoxAdaptor {
           final scrollOffsetCorrection =
               newPositionOfLastFirstChild - scrollOffset;
           if (scrollOffsetCorrection != 0) {
+            _onDiagnosticLog?.call(
+              'Scroll correction after crossAxisCount change: '
+              'correction=$scrollOffsetCorrection, '
+              'newPosition=$newPositionOfLastFirstChild, '
+              'scrollOffset=$scrollOffset',
+            );
             geometry = SliverGeometry(
               scrollOffsetCorrection: scrollOffsetCorrection,
             );
@@ -285,6 +318,7 @@ class RenderSliverMasonryGrid extends RenderSliverMultiBoxAdaptor {
     if (firstChild == null) {
       if (!addInitialChild()) {
         // There are no children.
+        _onDiagnosticLog?.call('No children available, returning zero geometry');
         geometry = SliverGeometry.zero;
         childManager.didFinishLayout();
         return;
@@ -307,6 +341,10 @@ class RenderSliverMasonryGrid extends RenderSliverMultiBoxAdaptor {
     // layout offset, we have to find the first child that has valid layout
     // offset.
     if (childScrollOffset(firstChild!) == null) {
+      _onDiagnosticLog?.call(
+        'firstChild has null layoutOffset at index ${indexOf(firstChild!)}, '
+        'recovering layout state',
+      );
       // Clear off-screen caches to prevent using stale data
       _previousCrossAxisIndexes.clear();
       _previousMainAxisExtents.clear();
@@ -327,11 +365,15 @@ class RenderSliverMasonryGrid extends RenderSliverMultiBoxAdaptor {
       }
       // We should be able to destroy children with null layout offset safely,
       // because they are likely outside of viewport
+      _onDiagnosticLog?.call(
+        'Collected $leadingChildrenWithoutLayoutOffset children with null layout offset',
+      );
       collectGarbage(leadingChildrenWithoutLayoutOffset, 0);
       // If can not find a valid layout offset, start from the initial child.
       if (firstChild == null) {
         if (!addInitialChild()) {
           // There are no children.
+          _onDiagnosticLog?.call('No children after garbage collection');
           geometry = SliverGeometry.zero;
           childManager.didFinishLayout();
           return;
@@ -442,6 +484,11 @@ class RenderSliverMasonryGrid extends RenderSliverMultiBoxAdaptor {
       if (earliestScrollOffset < -precisionErrorTolerance) {
         // Let's assume there is no child before the first child. We will
         // correct it on the next layout if it is not.
+        _onDiagnosticLog?.call(
+          'Negative scroll offset detected: '
+          'earliestScrollOffset=$earliestScrollOffset, '
+          'correction=${-earliestScrollOffset}',
+        );
         geometry = SliverGeometry(
           scrollOffsetCorrection: -earliestScrollOffset,
         );
@@ -486,6 +533,10 @@ class RenderSliverMasonryGrid extends RenderSliverMultiBoxAdaptor {
         // We only need to correct if the leading child actually has a
         // paint extent.
         if (firstChildScrollOffset < -precisionErrorTolerance) {
+          _onDiagnosticLog?.call(
+            'Leading child scroll correction at scroll=0: '
+            'correction=${-firstChildScrollOffset}',
+          );
           geometry = SliverGeometry(
             scrollOffsetCorrection: -firstChildScrollOffset,
           );
@@ -506,7 +557,27 @@ class RenderSliverMasonryGrid extends RenderSliverMultiBoxAdaptor {
     // After reorder recovery, the earliest child's offset might be slightly ahead
     // of scrollOffset. Only issue correction if we're not at the beginning of the list
     // and the offset is significantly ahead (prevents interfering with upward scrolling).
-    final double earliestChildOffset = childScrollOffset(earliestUsefulChild!)!;
+    
+    // CRITICAL: Log state before potential null check crash
+    if (earliestUsefulChild == null) {
+      _onDiagnosticLog?.call(
+        'CRITICAL: earliestUsefulChild is null! '
+        'firstChild=${firstChild != null ? indexOf(firstChild!) : "null"}, '
+        'scrollOffset=$scrollOffset, '
+        'leadingChildWithLayout=${leadingChildWithLayout != null ? indexOf(leadingChildWithLayout) : "null"}, '
+        'trailingChildWithLayout=${trailingChildWithLayout != null ? indexOf(trailingChildWithLayout) : "null"}',
+      );
+    }
+    final childOffset = childScrollOffset(earliestUsefulChild!);
+    if (childOffset == null) {
+      _onDiagnosticLog?.call(
+        'CRITICAL: childScrollOffset returned null for earliestUsefulChild! '
+        'earliestUsefulChildIndex=${indexOf(earliestUsefulChild)}, '
+        'scrollOffset=$scrollOffset, '
+        'firstChild=${firstChild != null ? indexOf(firstChild!) : "null"}',
+      );
+    }
+    final double earliestChildOffset = childOffset!;
     if (earliestChildOffset > scrollOffset + precisionErrorTolerance) {
       final int firstChildIndex = indexOf(firstChild!);
       if (firstChildIndex == 0) {
@@ -516,6 +587,11 @@ class RenderSliverMasonryGrid extends RenderSliverMultiBoxAdaptor {
       } else if (earliestChildOffset > scrollOffset + 1.0) {
         // Only correct if significantly ahead (> 1px) and not at beginning
         // This prevents interfering with normal upward scrolling
+        _onDiagnosticLog?.call(
+          'Earliest child significantly ahead: '
+          'offset=$earliestChildOffset, scrollOffset=$scrollOffset, '
+          'correction=${earliestChildOffset - scrollOffset}',
+        );
         geometry = SliverGeometry(
           scrollOffsetCorrection: earliestChildOffset - scrollOffset,
         );
@@ -528,6 +604,11 @@ class RenderSliverMasonryGrid extends RenderSliverMultiBoxAdaptor {
 
     // Make sure we've laid out at least one child.
     if (leadingChildWithLayout == null) {
+      _onDiagnosticLog?.call(
+        'Laying out earliestUsefulChild as leadingChildWithLayout: '
+        'earliestUsefulChildIndex=${indexOf(earliestUsefulChild)}, '
+        'scrollOffset=$scrollOffset',
+      );
       earliestUsefulChild.layout(childConstraints, parentUsesSize: true);
       leadingChildWithLayout = earliestUsefulChild;
       trailingChildWithLayout = earliestUsefulChild;
@@ -547,8 +628,17 @@ class RenderSliverMasonryGrid extends RenderSliverMultiBoxAdaptor {
     // for new children.
     // As earliestUsefulChild is already laid out, we start by updating the
     // scroll offsets for the next children.
-    scrollOffsets[_childCrossAxisIndex(child)!] =
-        childScrollOffset(child)! + paintExtentOf(child) + mainAxisSpacing;
+    final crossAxisIndex = _childCrossAxisIndex(child);
+    final currentChildOffset = childScrollOffset(child);
+    if (crossAxisIndex == null || currentChildOffset == null) {
+      _onDiagnosticLog?.call(
+        'CRITICAL: null values when updating scroll offsets! '
+        'crossAxisIndex=$crossAxisIndex, currentChildOffset=$currentChildOffset, '
+        'childIndex=${indexOf(child)}, scrollOffset=$scrollOffset',
+      );
+    }
+    scrollOffsets[crossAxisIndex!] =
+        currentChildOffset! + paintExtentOf(child) + mainAxisSpacing;
 
     // We also make sure that any infinite scroll offset is set to 0 now.
     for (int i = 0; i < scrollOffsets.length; i++) {
@@ -614,6 +704,10 @@ class RenderSliverMasonryGrid extends RenderSliverMultiBoxAdaptor {
         collectGarbage(leadingGarbage - 1, 0);
         assert(firstChild == lastChild);
         final double extent = scrollOffsets.reduce(math.max) - mainAxisSpacing;
+        _onDiagnosticLog?.call(
+          'Reached end with all children as garbage: '
+          'extent=$extent, leadingGarbage=$leadingGarbage',
+        );
         geometry = SliverGeometry(
           scrollExtent: extent,
           maxPaintExtent: extent,
@@ -643,6 +737,11 @@ class RenderSliverMasonryGrid extends RenderSliverMultiBoxAdaptor {
 
     // At this point everything should be good to go, we just have to clean up
     // the garbage and report the geometry.
+    if (leadingGarbage > 0 || trailingGarbage > 0) {
+      _onDiagnosticLog?.call(
+        'Collecting garbage: leading=$leadingGarbage, trailing=$trailingGarbage',
+      );
+    }
     collectGarbage(leadingGarbage, trailingGarbage);
 
     assert(debugAssertChildListIsNonEmptyAndContiguous());
@@ -682,6 +781,17 @@ class RenderSliverMasonryGrid extends RenderSliverMultiBoxAdaptor {
       // Conservative to avoid flickering away the clip during scroll.
       hasVisualOverflow: endScrollOffset > targetEndScrollOffsetForPaint ||
           constraints.scrollOffset > 0.0,
+    );
+
+    _onDiagnosticLog?.call(
+      'performLayout END: '
+      'scrollExtent=$estimatedMaxScrollOffset, '
+      'paintExtent=$paintExtent, '
+      'cacheExtent=$cacheExtent, '
+      'endScrollOffset=$endScrollOffset, '
+      'leadingScrollOffset=$leadingScrollOffset, '
+      'childCount=$childCount, '
+      'reachedEnd=$reachedEnd',
     );
 
     // We may have started the layout while scrolled to the end, which would not

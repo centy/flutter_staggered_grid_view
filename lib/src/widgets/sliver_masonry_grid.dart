@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_staggered_grid_view/src/rendering/sliver_masonry_grid.dart';
 import 'package:flutter_staggered_grid_view/src/rendering/sliver_simple_grid_delegate.dart';
 
+export 'package:flutter_staggered_grid_view/src/rendering/sliver_masonry_grid.dart'
+    show DiagnosticLogCallback;
+
 /// A sliver that places multiple box children in a two dimensional arrangement.
 ///
 /// [SliverMasonryGrid] places each child the nearest as possible at the
@@ -17,12 +20,16 @@ class SliverMasonryGrid extends SliverMultiBoxAdaptorWidget {
   ///
   /// The [mainAxisSpacing] and [crossAxisSpacing] arguments must be greater
   /// than zero.
+  ///
+  /// [onDiagnosticLog] is an optional callback for logging diagnostic information
+  /// useful for debugging layout issues on user devices.
   const SliverMasonryGrid({
     Key? key,
     required SliverChildDelegate delegate,
     required this.gridDelegate,
     this.mainAxisSpacing = 0,
     this.crossAxisSpacing = 0,
+    this.onDiagnosticLog,
   })  : assert(mainAxisSpacing >= 0),
         assert(crossAxisSpacing >= 0),
         super(key: key, delegate: delegate);
@@ -92,6 +99,9 @@ class SliverMasonryGrid extends SliverMultiBoxAdaptorWidget {
   /// {@macro fsgv.global.crossAxisSpacing}
   final double crossAxisSpacing;
 
+  /// Optional callback for logging diagnostic information.
+  final DiagnosticLogCallback? onDiagnosticLog;
+
   @override
   RenderSliverMasonryGrid createRenderObject(BuildContext context) {
     final SliverMultiBoxAdaptorElement element =
@@ -101,6 +111,7 @@ class SliverMasonryGrid extends SliverMultiBoxAdaptorWidget {
       gridDelegate: gridDelegate,
       mainAxisSpacing: mainAxisSpacing,
       crossAxisSpacing: crossAxisSpacing,
+      onDiagnosticLog: onDiagnosticLog,
     );
   }
 
@@ -113,5 +124,6 @@ class SliverMasonryGrid extends SliverMultiBoxAdaptorWidget {
       ..gridDelegate = gridDelegate
       ..mainAxisSpacing = mainAxisSpacing
       ..crossAxisSpacing = crossAxisSpacing;
+    // Note: onDiagnosticLog is only set at creation time
   }
 }

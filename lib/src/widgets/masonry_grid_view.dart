@@ -92,6 +92,7 @@ class MasonryGridView extends BoxScrollView {
     required this.gridDelegate,
     this.mainAxisSpacing = 0.0,
     this.crossAxisSpacing = 0.0,
+    this.onDiagnosticLog,
     bool addAutomaticKeepAlives = true,
     bool addRepaintBoundaries = true,
     bool addSemanticIndexes = true,
@@ -155,6 +156,7 @@ class MasonryGridView extends BoxScrollView {
     int? itemCount,
     this.mainAxisSpacing = 0.0,
     this.crossAxisSpacing = 0.0,
+    this.onDiagnosticLog,
     bool addAutomaticKeepAlives = true,
     bool addRepaintBoundaries = true,
     bool addSemanticIndexes = true,
@@ -208,6 +210,7 @@ class MasonryGridView extends BoxScrollView {
     required this.childrenDelegate,
     this.mainAxisSpacing = 0.0,
     this.crossAxisSpacing = 0.0,
+    this.onDiagnosticLog,
     double? cacheExtent,
     int? semanticChildCount,
     DragStartBehavior dragStartBehavior = DragStartBehavior.start,
@@ -259,6 +262,7 @@ class MasonryGridView extends BoxScrollView {
     required int crossAxisCount,
     this.mainAxisSpacing = 0.0,
     this.crossAxisSpacing = 0.0,
+    this.onDiagnosticLog,
     required IndexedWidgetBuilder itemBuilder,
     int? itemCount,
     bool addAutomaticKeepAlives = true,
@@ -325,6 +329,7 @@ class MasonryGridView extends BoxScrollView {
     required double maxCrossAxisExtent,
     this.mainAxisSpacing = 0.0,
     this.crossAxisSpacing = 0.0,
+    this.onDiagnosticLog,
     required IndexedWidgetBuilder itemBuilder,
     int? itemCount,
     bool addAutomaticKeepAlives = true,
@@ -378,6 +383,9 @@ class MasonryGridView extends BoxScrollView {
   /// {@macro fsgv.global.crossAxisSpacing}
   final double crossAxisSpacing;
 
+  /// Optional callback for logging diagnostic information.
+  final DiagnosticLogCallback? onDiagnosticLog;
+
   /// A delegate that provides the children for the [MasonryGridView].
   ///
   /// The [MasonryGridView.custom] constructor lets you specify this delegate
@@ -392,6 +400,7 @@ class MasonryGridView extends BoxScrollView {
       gridDelegate: gridDelegate,
       mainAxisSpacing: mainAxisSpacing,
       crossAxisSpacing: crossAxisSpacing,
+      onDiagnosticLog: onDiagnosticLog,
     );
   }
 }
