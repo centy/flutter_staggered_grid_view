@@ -226,6 +226,20 @@ class RenderSliverMasonryGrid extends RenderSliverMultiBoxAdaptor {
         constraints.scrollOffset + constraints.cacheOrigin;
 
     assert(scrollOffset >= 0.0);
+    
+    // Handle corrupted scroll state with Infinity scrollOffset.
+    // This can happen when viewport state is temporarily invalid during
+    // layout transitions (e.g., after completing/removing items).
+    if (scrollOffset.isInfinite) {
+      _onDiagnosticLog?.call(
+        'Detected Infinity scrollOffset, requesting correction to 0',
+      );
+      geometry = SliverGeometry(
+        scrollOffsetCorrection: -constraints.scrollOffset,
+      );
+      return;
+    }
+    
     final double remainingExtent = constraints.remainingCacheExtent;
     assert(remainingExtent >= 0.0);
     final double targetEndScrollOffset = scrollOffset + remainingExtent;
@@ -354,6 +368,7 @@ class RenderSliverMasonryGrid extends RenderSliverMultiBoxAdaptor {
       while (c != null) {
         final parentData = _getParentData(c);
         parentData.layoutOffset = null;
+        parentData.crossAxisIndex = null;  // Also invalidate crossAxisIndex
         c = childAfter(c);
       }
 
@@ -392,9 +407,10 @@ class RenderSliverMasonryGrid extends RenderSliverMultiBoxAdaptor {
       // We already laid out this child once before, so we must have retain it
       // last extent and crossAxisIndex.
       final firstChildParentData = _getParentData(firstChild!);
-      final mainAxisExtent =
-          firstChildParentData.lastMainAxisExtent! + mainAxisSpacing;
-      final crossAxisIndex = firstChildParentData.crossAxisIndex!;
+      
+      // Handle corrupted parent data by using safe defaults
+      final mainAxisExtent = (firstChildParentData.lastMainAxisExtent ?? 0.0) + mainAxisSpacing;
+      final crossAxisIndex = firstChildParentData.crossAxisIndex ?? 0;
 
       double offset = scrollOffsets[crossAxisIndex] - mainAxisExtent;
 
@@ -503,8 +519,8 @@ class RenderSliverMasonryGrid extends RenderSliverMultiBoxAdaptor {
       final childParentData = _getParentData(earliestUsefulChild);
       childParentData.apply(firstChildParentData);
       // Don't forget to update the earliestScrollOffsets.
-      scrollOffsets[firstChildParentData.crossAxisIndex!] =
-          firstChildParentData.layoutOffset!;
+      scrollOffsets[firstChildParentData.crossAxisIndex ?? 0] =
+          firstChildParentData.layoutOffset ?? 0.0;
       assert(earliestUsefulChild == firstChild);
       leadingChildWithLayout = earliestUsefulChild;
       trailingChildWithLayout ??= earliestUsefulChild;
@@ -529,7 +545,7 @@ class RenderSliverMasonryGrid extends RenderSliverMultiBoxAdaptor {
         assert(earliestUsefulChild != null);
         final firstChildParentData = computeFirstChildParentData();
         childParentData.apply(firstChildParentData);
-        final firstChildScrollOffset = firstChildParentData.layoutOffset!;
+        final firstChildScrollOffset = firstChildParentData.layoutOffset ?? 0.0;
         // We only need to correct if the leading child actually has a
         // paint extent.
         if (firstChildScrollOffset < -precisionErrorTolerance) {
@@ -610,6 +626,9 @@ class RenderSliverMasonryGrid extends RenderSliverMultiBoxAdaptor {
         'scrollOffset=$scrollOffset',
       );
       earliestUsefulChild.layout(childConstraints, parentUsesSize: true);
+      // CRITICAL: Position the child to update its parent data (crossAxisIndex, layoutOffset)
+      // Without this, the child might have stale/null parent data from previous layouts
+      positionChild(earliestUsefulChild);
       leadingChildWithLayout = earliestUsefulChild;
       trailingChildWithLayout = earliestUsefulChild;
     }
@@ -634,11 +653,21 @@ class RenderSliverMasonryGrid extends RenderSliverMultiBoxAdaptor {
       _onDiagnosticLog?.call(
         'CRITICAL: null values when updating scroll offsets! '
         'crossAxisIndex=$crossAxisIndex, currentChildOffset=$currentChildOffset, '
-        'childIndex=${indexOf(child)}, scrollOffset=$scrollOffset',
+        'childIndex=${indexOf(child)}, scrollOffset=$scrollOffset, '
+        'applying scroll correction to recover',
       );
+      
+      // Parent data is corrupted, likely due to Infinity scrollOffset.
+      // Force a scroll correction to reset the viewport to a valid state.
+      // Clear corrupted children and request correction to scroll position 0.
+      collectGarbage(childCount, 0);
+      geometry = SliverGeometry(
+        scrollOffsetCorrection: -scrollOffset,
+      );
+      return;
     }
-    scrollOffsets[crossAxisIndex!] =
-        currentChildOffset! + paintExtentOf(child) + mainAxisSpacing;
+    scrollOffsets[crossAxisIndex] =
+        currentChildOffset + paintExtentOf(child) + mainAxisSpacing;
 
     // We also make sure that any infinite scroll offset is set to 0 now.
     for (int i = 0; i < scrollOffsets.length; i++) {
